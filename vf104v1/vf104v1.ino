@@ -32,8 +32,16 @@ int LED_CURVE[] = {
 0xFD, 0xFD, 0xFD, 0xFD, 0xFD, 0xFD, 0xFD, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFF, 0xFF
 };
 int PARAM_BUTTON_PIN = 30;
+int SAVE_BUTTON_PIN = 28;
+int BANK_A_BUTTON_PIN = 40;
+int BANK_B_BUTTON_PIN = 41;
+int BANK_C_BUTTON_PIN = 42;
 
-int LAST_PARAM_BUTTON_VALUE = 0;
+Button PARAM_BUTTON(PARAM_BUTTON_PIN, 100);
+Button BANK_A_BUTTON(BANK_A_BUTTON_PIN);
+Button BANK_B_BUTTON(BANK_B_BUTTON_PIN);
+Button BANK_C_BUTTON(BANK_C_BUTTON_PIN);
+
 char STATE_BANK = 'A'; // A,B,C indicating current preset bank
 int STATE_PRESET = 1; // 1-3 indicating current preset
 int STATE_PARAMETER = 1; // 1-8 indicating current parameter
@@ -42,6 +50,10 @@ bool STATE_SAVE_INDICATOR = false; // indicates if save led should be blinking
 void setup() {
   Serial.begin(9600);
   intializePins();
+  PARAM_BUTTON.begin();
+  BANK_A_BUTTON.begin();
+  BANK_B_BUTTON.begin();
+  BANK_C_BUTTON.begin();
   turnOnLeds();
 }
 
@@ -55,13 +67,25 @@ void loop() {
 
 void updateStates() {
   // update bank
+  BANK_A_BUTTON.read();
+  BANK_B_BUTTON.read();
+  BANK_C_BUTTON.read();
+  if ( BANK_C_BUTTON.isPressed() ) {
+    STATE_BANK = 'C';
+  } else if ( BANK_B_BUTTON.isPressed() ) {
+    STATE_BANK = 'B';
+  } else {
+    STATE_BANK = 'A';
+  }
+  Serial.println(STATE_BANK);
+  
   // update preset
+  
   // update parameter
-  int currentParamButtonValue = digitalRead(PARAM_BUTTON_PIN);
-  if (LAST_PARAM_BUTTON_VALUE == 1 && currentParamButtonValue == 0) {
+  PARAM_BUTTON.read();
+  if ( PARAM_BUTTON.wasPressed() ) {
     nextParam();
   }
-  LAST_PARAM_BUTTON_VALUE = currentParamButtonValue;
 }
 
 void nextParam() {
