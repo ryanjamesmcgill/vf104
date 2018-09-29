@@ -1,6 +1,7 @@
 #include <Encoder.h>
 #include <JC_Button.h>
 #include <jled.h>
+#include <EEPROM.h>
 
 int LED_CURVE[] = {
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
@@ -41,7 +42,8 @@ int MIDI_DATA[3][3][8] = {
     {0,0,0,0,0,0,0,0}
   }
 };
-int ACTIVE_MIDI_DATA[8] = {100,0,0,0,0,0,0,0};
+int ACTIVE_MIDI_DATA[8] = {0,0,0,0,0,0,0,0};
+int ACTIVE_MIDI_DATA_LENGTH = 8;
 
 int ENCODER_A_PIN = 18;
 int ENCODER_B_PIN = 19;
@@ -49,10 +51,10 @@ Encoder ENCODER(ENCODER_B_PIN, ENCODER_A_PIN);
 int ENCODER_MAX_POSITION = 127;
 int ENCODER_MIN_POSITION = 0;
 int LED_PARAM_PINS[] = {32, 33, 34, 35, 36, 37, 38, 39};
+int LED_PARAM_PINS_LENGTH = 8;
 int LED_PRESET_PINS[] = {23, 25, 27};
 int LED_PRESET_PINS_LENGTH = 3;
 int BUTTON_PRESET_PINS[] = {22, 24, 26};
-int LED_PARAM_PINS_LENGTH = 8;
 int LED_SAVE_PIN = 29;
 int LED_ENCODER_PINS[] = {A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, 44, 45, 46};
 int LED_ENCODER_PINS_LENGTH = 15;
@@ -63,18 +65,18 @@ int BANK_A_BUTTON_PIN = 40;
 int BANK_B_BUTTON_PIN = 41;
 int BANK_C_BUTTON_PIN = 42;
 
-char STATE_BANK = 'A'; // A,B,C indicating current preset bank
-int STATE_PRESET = 1; // 1-3 indicating current preset
-int STATE_PARAMETER = 1; // 1-8 indicating current parameter
-bool STATE_SAVE_INDICATOR = false; // indicates if save led should be blinking
+int STATE_BANK = 0; // 0,1,2 indicating current preset bank
+int STATE_PRESET = 0; // 0,1,2indicating current preset
+int STATE_PARAMETER = 0; // 0-7 indicating current parameter
+bool STATE_SAVE_INDICATOR =false; // indicates if save led should be blinking
 
 Button PARAM_BUTTON(PARAM_BUTTON_PIN, 100);
 Button BANK_A_BUTTON(BANK_A_BUTTON_PIN);
 Button BANK_B_BUTTON(BANK_B_BUTTON_PIN);
 Button BANK_C_BUTTON(BANK_C_BUTTON_PIN);
-Button PRESET_1_BUTTON(BUTTON_PRESET_PINS[0]);
-Button PRESET_2_BUTTON(BUTTON_PRESET_PINS[1]);
-Button PRESET_3_BUTTON(BUTTON_PRESET_PINS[2]);
+Button PRESET_0_BUTTON(BUTTON_PRESET_PINS[0]);
+Button PRESET_1_BUTTON(BUTTON_PRESET_PINS[1]);
+Button PRESET_2_BUTTON(BUTTON_PRESET_PINS[2]);
 Button SAVE_BUTTON(SAVE_BUTTON_PIN);
 JLed LED_SAVE = JLed(LED_SAVE_PIN);
 
@@ -85,13 +87,16 @@ void setup() {
   BANK_A_BUTTON.begin();
   BANK_B_BUTTON.begin();
   BANK_C_BUTTON.begin();
+  PRESET_0_BUTTON.begin();
   PRESET_1_BUTTON.begin();
   PRESET_2_BUTTON.begin();
-  PRESET_3_BUTTON.begin();
   SAVE_BUTTON.begin();
   setParameterLeds();
   setPresetLeds();
-  setEncoderLeds();
+  read_eeprom();
+  loadActiveMidiData();
+  sendMidiPreset();
+  setEncoderToCurrentParameter();
 }
 
 void loop() {
@@ -108,8 +113,10 @@ void updateLeds() {
 }
 
 void startSaveIndicator(){
-  STATE_SAVE_INDICATOR = true;
-  LED_SAVE.Blink(500,500).Forever();
+  if (STATE_SAVE_INDICATOR == false) {
+    STATE_SAVE_INDICATOR = true;
+    LED_SAVE.Blink(500,500).Forever();
+  }
 }
 
 void stopSaveIndicator(){
@@ -120,58 +127,54 @@ void stopSaveIndicator(){
 void updateSave() {
   SAVE_BUTTON.read();
   if ( SAVE_BUTTON.wasPressed() ) {
-    if (STATE_SAVE_INDICATOR == true) {
-      stopSaveIndicator();
-    } else {
-      startSaveIndicator();
-    }
+    writeActiveMidiData();
+    write_eeprom();
   }
 }
 
 void updateBanks() {
-  // update bank
   BANK_A_BUTTON.read();
   BANK_B_BUTTON.read();
   BANK_C_BUTTON.read();
-  if ( BANK_C_BUTTON.isPressed() && STATE_BANK == 'C' ) {
-    STATE_BANK = 'C';
-    sendMidiPreset();
+  if ( BANK_C_BUTTON.isPressed() && STATE_BANK != 2 ) {
+    STATE_BANK = 2;
     loadActiveMidiData();
+    sendMidiPreset();
     setEncoderToCurrentParameter();
-  } else if ( BANK_B_BUTTON.isPressed() && STATE_BANK == 'B' ) {
-    STATE_BANK = 'B';
-    sendMidiPreset();
+  } else if ( BANK_B_BUTTON.isPressed() && STATE_BANK != 1 ) {
+    STATE_BANK = 1;
     loadActiveMidiData();
+    sendMidiPreset();
     setEncoderToCurrentParameter();
-  } else if ( BANK_A_BUTTON.isPressed() && STATE_BANK == 'A' ){
-    STATE_BANK = 'A';
-    sendMidiPreset();
+  } else if ( BANK_A_BUTTON.isPressed() && STATE_BANK != 0 ){
+    STATE_BANK = 0;
     loadActiveMidiData();
+    sendMidiPreset();
     setEncoderToCurrentParameter();
   }
 }
   
 void updatePresets() {
+  PRESET_0_BUTTON.read();
   PRESET_1_BUTTON.read();
   PRESET_2_BUTTON.read();
-  PRESET_3_BUTTON.read();
-  if ( PRESET_1_BUTTON.wasPressed() ) {
-    STATE_PRESET = 1;
+  if ( PRESET_0_BUTTON.wasPressed() ) {
+    STATE_PRESET = 0;
+    loadActiveMidiData();
     sendMidiPreset();
     setPresetLeds();
+    setEncoderToCurrentParameter();
+  } else if ( PRESET_1_BUTTON.wasPressed() ) {
+    STATE_PRESET = 1;
     loadActiveMidiData();
+    sendMidiPreset();
+    setPresetLeds();
     setEncoderToCurrentParameter();
   } else if ( PRESET_2_BUTTON.wasPressed() ) {
     STATE_PRESET = 2;
+    loadActiveMidiData();
     sendMidiPreset();
     setPresetLeds();
-    loadActiveMidiData();
-    setEncoderToCurrentParameter();
-  } else if ( PRESET_3_BUTTON.wasPressed() ) {
-    STATE_PRESET = 3;
-    sendMidiPreset();
-    setPresetLeds();
-    loadActiveMidiData();
     setEncoderToCurrentParameter();
   }
 }
@@ -189,15 +192,15 @@ void updateParameters() {
 void nextParam() {
   // only called when "next param" button is pressed
   STATE_PARAMETER = STATE_PARAMETER + 1;
-  if (STATE_PARAMETER > LED_PARAM_PINS_LENGTH) {
-    STATE_PARAMETER = 1;
+  if (STATE_PARAMETER >= LED_PARAM_PINS_LENGTH) {
+    STATE_PARAMETER = 0;
   }
 }
 
 void setPresetLeds() {
   // only called when a preset footswitch is pressed
   for (int idx = 0; idx < LED_PRESET_PINS_LENGTH; idx++) {
-    if (idx + 1 == STATE_PRESET) {
+    if (idx == STATE_PRESET) {
       digitalWrite(LED_PRESET_PINS[idx], HIGH);
       // write encoder value for current bank, preset, param
     } else {
@@ -208,7 +211,7 @@ void setPresetLeds() {
 
 void setParameterLeds() {
   for (int idx = 0; idx < LED_PARAM_PINS_LENGTH; idx++) {
-    if (idx + 1 == STATE_PARAMETER) {
+    if (idx == STATE_PARAMETER) {
       digitalWrite(LED_PARAM_PINS[idx], HIGH);
       // write encoder value for current bank, preset, param
     } else {
@@ -221,7 +224,7 @@ void setEncoderLeds() {
  for (int idx = 0; idx < LED_ENCODER_PINS_LENGTH; idx++) {
   float max_position = (idx+1) * LED_ENCODER_STEP_POSITION;
   float min_position = idx * LED_ENCODER_STEP_POSITION;
-  setEncoderLed(LED_ENCODER_PINS[idx], ACTIVE_MIDI_DATA[STATE_PARAMETER-1], min_position, max_position);
+  setEncoderLed(LED_ENCODER_PINS[idx], ACTIVE_MIDI_DATA[STATE_PARAMETER], min_position, max_position);
  }
 }
 
@@ -243,7 +246,7 @@ void setEncoderLed(int pin, int encoder_position, float led_min_positon, float l
 
 void updateEncoderPosition() {
   int newPosition = int(ENCODER.read());
-  if (newPosition != ACTIVE_MIDI_DATA[STATE_PARAMETER-1]) {
+  if (newPosition != ACTIVE_MIDI_DATA[STATE_PARAMETER]) {
     if (newPosition > ENCODER_MAX_POSITION) {
       ENCODER.write(long(ENCODER_MAX_POSITION));
       newPosition = ENCODER_MAX_POSITION;
@@ -251,9 +254,10 @@ void updateEncoderPosition() {
       ENCODER.write(long(ENCODER_MIN_POSITION));
       newPosition = ENCODER_MIN_POSITION;
     }
-    ACTIVE_MIDI_DATA[STATE_PARAMETER-1] = newPosition;
+    ACTIVE_MIDI_DATA[STATE_PARAMETER] = newPosition;
     setEncoderLeds();
     sendMidiParameter();
+    startSaveIndicator();
   }
 }
 
@@ -269,30 +273,89 @@ void intializePins () {
 }
 
 void setEncoderToCurrentParameter() {
-  ENCODER.write(long(ACTIVE_MIDI_DATA[STATE_PARAMETER-1]));
+  ENCODER.write(long(ACTIVE_MIDI_DATA[STATE_PARAMETER]));
   setEncoderLeds();
 }
 
-void load_eeprom() {
+void read_eeprom() {
   // loads MIDI_DATA from eeprom
+  int bank_count = 3;
+  int preset_count = LED_PRESET_PINS_LENGTH;
+  int parameter_count = LED_PARAM_PINS_LENGTH;
+  int address = 0;
+  for (int bankIdx = 0; bankIdx < bank_count; bankIdx++) {
+    for (int presetIdx = 0; presetIdx < preset_count; presetIdx++) {
+      for (int parameterIdx = 0; parameterIdx < parameter_count; parameterIdx++) {
+        MIDI_DATA[bankIdx][presetIdx][parameterIdx] = EEPROM.read(address);
+        address++;
+      }
+    }
+  }
 }
 
 void write_eeprom() {
   // writes MIDI_DATA to eeprom
+  int bank_count = 3;
+  int preset_count = LED_PRESET_PINS_LENGTH;
+  int parameter_count = LED_PARAM_PINS_LENGTH;
+  int address = 0;
+  LED_SAVE.On().Update();
+  for (int bankIdx = 0; bankIdx < bank_count; bankIdx++) {
+    for (int presetIdx = 0; presetIdx < preset_count; presetIdx++) {
+      for (int parameterIdx = 0; parameterIdx < parameter_count; parameterIdx++) {
+        EEPROM.update(address, MIDI_DATA[bankIdx][presetIdx][parameterIdx]);
+        address++;
+      }
+    }
+  }
+  stopSaveIndicator();
 }
 
 void loadActiveMidiData() {
   // loads MIDI_DATA[bank][preset] => CURRENT_PREST
+  for (int idx = 0; idx < ACTIVE_MIDI_DATA_LENGTH; idx++) {
+    ACTIVE_MIDI_DATA[idx] = MIDI_DATA[STATE_BANK][STATE_PRESET][idx];
+  }
+  stopSaveIndicator();
 }
 
 void writeActiveMidiData() {
   // writes ACTIVE_MIDI_DATA => MIDI_DATA[bank][preset]
+  for (int idx = 0; idx < ACTIVE_MIDI_DATA_LENGTH; idx++) {
+    MIDI_DATA[STATE_BANK][STATE_PRESET][idx] = ACTIVE_MIDI_DATA[idx];
+  }
+}
+
+int getMidiCcParameter(int index) {
+  // returns midi cc parameter coresponding to index of ACTIVE_MIDI_DATA array
+  int parameters[] = {
+    12, // delay time
+    86, // short or long delay mode
+    13, // feedback
+    7,  // output level
+    14, // mix
+    102,// lfo waveform
+    15, // lfo rate
+    16, // lfo amount
+  };
+  return parameters[index];
 }
 
 void sendMidiPreset() {
-  // Sends entire midi preset for Bank, Preset
+  // Sends entire midi preset in ACTIVE_MIDI_DATA
+  char ccMidi = 0xB0;
+  for (int idx = 0; idx < ACTIVE_MIDI_DATA_LENGTH; idx++) {
+    Serial.write(ccMidi);
+    Serial.write(getMidiCcParameter(idx));
+    Serial.write(ACTIVE_MIDI_DATA[idx]);
+  }
+
 }
 
 void sendMidiParameter() {
-  // Sends only parameter for Bank, Preset, Parameter
+  // Sends only STATE_PARMAETER in ACTIVE_MIDI_DATA
+  char ccMidi = 0xB0;
+  Serial.write(ccMidi);
+  Serial.write(getMidiCcParameter(STATE_PARAMETER));
+  Serial.write(ACTIVE_MIDI_DATA[STATE_PARAMETER]);
 }
