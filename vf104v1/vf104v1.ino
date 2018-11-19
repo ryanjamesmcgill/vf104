@@ -65,7 +65,7 @@ int BANK_A_BUTTON_PIN = 40;
 int BANK_B_BUTTON_PIN = 41;
 int BANK_C_BUTTON_PIN = 42;
 
-int ENCODER_LED_MAX_BRIGHTNESS = 75; // 0-255
+int ENCODER_LED_MAX_BRIGHTNESS = 40; // 0-255
 int MIDI_DELAY_BETWEEN_PARAMETERS_MS = 10; // delay time between each parameter when sending a preset via midi
 
 int STATE_BANK = 0; // 0,1,2 indicating current preset bank
