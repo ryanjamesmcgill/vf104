@@ -56,7 +56,7 @@ int LED_PRESET_PINS[] = {23, 25, 27};
 int LED_PRESET_PINS_LENGTH = 3;
 int BUTTON_PRESET_PINS[] = {22, 24, 26};
 int LED_SAVE_PIN = 29;
-int LED_ENCODER_PINS[] = {A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, 44, 45, 46};
+int LED_ENCODER_PINS[] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 44, 45, 46};
 int LED_ENCODER_PINS_LENGTH = 15;
 float LED_ENCODER_STEP_POSITION = (ENCODER_MAX_POSITION - ENCODER_MIN_POSITION) / LED_ENCODER_PINS_LENGTH;
 int PARAM_BUTTON_PIN = 30;
@@ -64,6 +64,9 @@ int SAVE_BUTTON_PIN = 28;
 int BANK_A_BUTTON_PIN = 40;
 int BANK_B_BUTTON_PIN = 41;
 int BANK_C_BUTTON_PIN = 42;
+
+int ENCODER_LED_MAX_BRIGHTNESS = 75; // 0-255
+int MIDI_DELAY_BETWEEN_PARAMETERS_MS = 10; // delay time between each parameter when sending a preset via midi
 
 int STATE_BANK = 0; // 0,1,2 indicating current preset bank
 int STATE_PRESET = 0; // 0,1,2indicating current preset
@@ -81,7 +84,7 @@ Button SAVE_BUTTON(SAVE_BUTTON_PIN);
 JLed LED_SAVE = JLed(LED_SAVE_PIN);
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(31250);
   intializePins();
   PARAM_BUTTON.begin();
   BANK_A_BUTTON.begin();
@@ -230,7 +233,7 @@ void setEncoderLeds() {
 
 void setEncoderLed(int pin, int encoder_position, float led_min_positon, float led_max_positon) {
   int ledBrightness;
-  int ledMaxBrghtness = 255;
+  int ledMaxBrghtness = ENCODER_LED_MAX_BRIGHTNESS;
   float fraction;
   if (encoder_position >= led_max_positon) {
     ledBrightness = LED_CURVE[ledMaxBrghtness];
@@ -256,7 +259,7 @@ void updateEncoderPosition() {
     }
     ACTIVE_MIDI_DATA[STATE_PARAMETER] = newPosition;
     setEncoderLeds();
-    sendMidiParameter();
+    sendMidiParameter(STATE_PARAMETER);
     startSaveIndicator();
   }
 }
@@ -344,18 +347,30 @@ int getMidiCcParameter(int index) {
 void sendMidiPreset() {
   // Sends entire midi preset in ACTIVE_MIDI_DATA
   char ccMidi = 0xB0;
-  for (int idx = 0; idx < ACTIVE_MIDI_DATA_LENGTH; idx++) {
-    Serial.write(ccMidi);
-    Serial.write(getMidiCcParameter(idx));
-    Serial.write(ACTIVE_MIDI_DATA[idx]);
-  }
 
+  sendMidiParameter(0);
+  delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
+  sendMidiParameter(1);
+  delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
+  sendMidiParameter(2);
+  delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
+  sendMidiParameter(3);
+  delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
+  sendMidiParameter(4); // send mix setting last to mute glitch sounds
+  delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
+  sendMidiParameter(5);
+  delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
+  sendMidiParameter(6);
+  delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
+  sendMidiParameter(7);
 }
 
-void sendMidiParameter() {
+void sendMidiParameter(int parameter) {
   // Sends only STATE_PARMAETER in ACTIVE_MIDI_DATA
+  noInterrupts();
   char ccMidi = 0xB0;
   Serial.write(ccMidi);
-  Serial.write(getMidiCcParameter(STATE_PARAMETER));
-  Serial.write(ACTIVE_MIDI_DATA[STATE_PARAMETER]);
+  Serial.write(getMidiCcParameter(parameter));
+  Serial.write(ACTIVE_MIDI_DATA[parameter]);
+  interrupts();
 }
