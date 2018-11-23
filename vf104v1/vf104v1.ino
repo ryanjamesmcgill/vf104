@@ -85,7 +85,7 @@ JLed LED_SAVE = JLed(LED_SAVE_PIN);
 
 void setup() {
   Serial.begin(31250);
-  intializePins();
+  initializePins();
   PARAM_BUTTON.begin();
   BANK_A_BUTTON.begin();
   BANK_B_BUTTON.begin();
@@ -264,15 +264,17 @@ void updateEncoderPosition() {
   }
 }
 
-void intializePins () {
+void initializePins () {
   pinMode(LED_SAVE_PIN, OUTPUT);
   for (int idx = 0; idx < LED_PARAM_PINS_LENGTH; idx++) {
     pinMode(LED_PARAM_PINS[idx], OUTPUT);
   }
+  for (int idx = 0; idx < LED_PRESET_PINS_LENGTH; idx++) {
+    pinMode(LED_PRESET_PINS[idx], OUTPUT);
+  }
   for (int idx = 0; idx < LED_ENCODER_PINS_LENGTH; idx++) {
     pinMode(LED_ENCODER_PINS[idx], OUTPUT);
   }
-  pinMode(PARAM_BUTTON_PIN, INPUT_PULLUP);
 }
 
 void setEncoderToCurrentParameter() {
