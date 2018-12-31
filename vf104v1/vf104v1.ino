@@ -71,7 +71,11 @@ int MIDI_DELAY_BETWEEN_PARAMETERS_MS = 10; // delay time between each parameter 
 int STATE_BANK = 0; // 0,1,2 indicating current preset bank
 int STATE_PRESET = 0; // 0,1,2indicating current preset
 int STATE_PARAMETER = 0; // 0-7 indicating current parameter
-bool STATE_SAVE_INDICATOR =false; // indicates if save led should be blinking
+bool STATE_SAVE_INDICATOR = false; // indicates if save led should be blinking
+
+// special case parameters with descrete settings
+int PARAMETER_DELAY_MODE = 1;
+int PARAMETER_LFO_WAVEFORM = 5;
 
 Button PARAM_BUTTON(PARAM_BUTTON_PIN, 100);
 Button BANK_A_BUTTON(BANK_A_BUTTON_PIN);
@@ -224,11 +228,50 @@ void setParameterLeds() {
 }
 
 void setEncoderLeds() {
- for (int idx = 0; idx < LED_ENCODER_PINS_LENGTH; idx++) {
-  float max_position = (idx+1) * LED_ENCODER_STEP_POSITION;
-  float min_position = idx * LED_ENCODER_STEP_POSITION;
-  setEncoderLed(LED_ENCODER_PINS[idx], ACTIVE_MIDI_DATA[STATE_PARAMETER], min_position, max_position);
- }
+  if (STATE_PARAMETER == PARAMETER_DELAY_MODE) {
+    int delayModeCCValue = ACTIVE_MIDI_DATA[STATE_PARAMETER];
+    for (int idx = 0; idx < LED_ENCODER_PINS_LENGTH; idx++) {
+      int ledBrightness = 0;
+      if(idx == 0 && delayModeCCValue < 64) {
+        ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
+      }
+      if (idx == 1 && delayModeCCValue >= 64) {
+        ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
+      }
+      int pin = LED_ENCODER_PINS[idx];
+      analogWrite(pin, ledBrightness);
+    } 
+  } else if (STATE_PARAMETER == PARAMETER_LFO_WAVEFORM) {
+    int waveformCCValue = ACTIVE_MIDI_DATA[STATE_PARAMETER];
+    for (int idx = 0; idx < LED_ENCODER_PINS_LENGTH; idx++) {
+      int ledBrightness = 0;
+      if(idx == 9 && waveformCCValue <= 15) { // sine
+        ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
+      }
+      if (idx == 10 && waveformCCValue >= 16 && waveformCCValue <= 31) { // triangle
+        ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
+      }
+      if (idx == 11 && waveformCCValue >= 32 && waveformCCValue <= 47) { // square
+        ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
+      }
+      if (idx == 12 && waveformCCValue >= 48 && waveformCCValue <= 63) { // saw
+        ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
+      }
+      if (idx == 13 && waveformCCValue >= 64 && waveformCCValue <= 79) { // ramp
+        ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
+      }
+      if (idx == 14 && waveformCCValue >= 80 && waveformCCValue <= 95) { // s&h
+        ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
+      }
+      int pin = LED_ENCODER_PINS[idx];
+      analogWrite(pin, ledBrightness);
+    }
+  } else
+    for (int idx = 0; idx < LED_ENCODER_PINS_LENGTH; idx++) {
+      float max_position = (idx+1) * LED_ENCODER_STEP_POSITION;
+      float min_position = idx * LED_ENCODER_STEP_POSITION;
+      setEncoderLed(LED_ENCODER_PINS[idx], ACTIVE_MIDI_DATA[STATE_PARAMETER], min_position, max_position);
+    }
 }
 
 void setEncoderLed(int pin, int encoder_position, float led_min_positon, float led_max_positon) {
@@ -250,17 +293,37 @@ void setEncoderLed(int pin, int encoder_position, float led_min_positon, float l
 void updateEncoderPosition() {
   int newPosition = int(ENCODER.read());
   if (newPosition != ACTIVE_MIDI_DATA[STATE_PARAMETER]) {
-    if (newPosition > ENCODER_MAX_POSITION) {
-      ENCODER.write(long(ENCODER_MAX_POSITION));
-      newPosition = ENCODER_MAX_POSITION;
-    } else if (newPosition < ENCODER_MIN_POSITION) {
-      ENCODER.write(long(ENCODER_MIN_POSITION));
-      newPosition = ENCODER_MIN_POSITION;
+    if (newPosition > getEncoderMaxPosition()) {
+      ENCODER.write(long(getEncoderMaxPosition()));
+      newPosition = getEncoderMaxPosition();
+    } else if (newPosition < getEncoderMinPosition()) {
+      ENCODER.write(long(getEncoderMinPosition()));
+      newPosition = getEncoderMinPosition();
     }
     ACTIVE_MIDI_DATA[STATE_PARAMETER] = newPosition;
     setEncoderLeds();
     sendMidiParameter(STATE_PARAMETER);
     startSaveIndicator();
+  }
+}
+
+int getEncoderMaxPosition() {
+  if (STATE_PARAMETER == PARAMETER_DELAY_MODE) {
+    return 80;
+  } else if (STATE_PARAMETER == PARAMETER_LFO_WAVEFORM) {
+    return 95;
+  } else {
+    return ENCODER_MAX_POSITION;
+  }
+}
+
+int getEncoderMinPosition() {
+  if (STATE_PARAMETER == PARAMETER_DELAY_MODE) {
+    return 50;
+  } else if (STATE_PARAMETER == PARAMETER_LFO_WAVEFORM) {
+    return 0;
+  } else {
+    return ENCODER_MIN_POSITION;
   }
 }
 
