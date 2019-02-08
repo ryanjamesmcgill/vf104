@@ -65,7 +65,7 @@ int BANK_A_BUTTON_PIN = 40;
 int BANK_B_BUTTON_PIN = 41;
 int BANK_C_BUTTON_PIN = 42;
 
-int ENCODER_LED_MAX_BRIGHTNESS = 255; // 0-255
+int ENCODER_LED_MAX_BRIGHTNESS = 120; // 0-255
 int MIDI_DELAY_BETWEEN_PARAMETERS_MS = 10; // delay time between each parameter when sending a preset via midi
 
 int STATE_BANK = 0; // 0,1,2 indicating current preset bank
@@ -232,7 +232,8 @@ void setEncoderLeds() {
     int delayModeCCValue = ACTIVE_MIDI_DATA[STATE_PARAMETER];
     for (int idx = 0; idx < LED_ENCODER_PINS_LENGTH; idx++) {
       int ledBrightness = 0;
-      if(idx == 0 && delayModeCCValue < 64) {
+      int nullCutoff = getEncoderMinPosition(STATE_PARAMETER);
+      if(idx == 0 && delayModeCCValue < 64 && delayModeCCValue > nullCutoff) {
         ledBrightness = ENCODER_LED_MAX_BRIGHTNESS;
       }
       if (idx == 1 && delayModeCCValue >= 64) {
@@ -293,12 +294,12 @@ void setEncoderLed(int pin, int encoder_position, float led_min_positon, float l
 void updateEncoderPosition() {
   int newPosition = int(ENCODER.read());
   if (newPosition != ACTIVE_MIDI_DATA[STATE_PARAMETER]) {
-    if (newPosition > getEncoderMaxPosition()) {
-      ENCODER.write(long(getEncoderMaxPosition()));
-      newPosition = getEncoderMaxPosition();
-    } else if (newPosition < getEncoderMinPosition()) {
-      ENCODER.write(long(getEncoderMinPosition()));
-      newPosition = getEncoderMinPosition();
+    if (newPosition > getEncoderMaxPosition(STATE_PARAMETER)) {
+      ENCODER.write(long(getEncoderMaxPosition(STATE_PARAMETER)));
+      newPosition = getEncoderMaxPosition(STATE_PARAMETER);
+    } else if (newPosition < getEncoderMinPosition(STATE_PARAMETER)) {
+      ENCODER.write(long(getEncoderMinPosition(STATE_PARAMETER)));
+      newPosition = getEncoderMinPosition(STATE_PARAMETER);
     }
     ACTIVE_MIDI_DATA[STATE_PARAMETER] = newPosition;
     setEncoderLeds();
@@ -307,20 +308,20 @@ void updateEncoderPosition() {
   }
 }
 
-int getEncoderMaxPosition() {
-  if (STATE_PARAMETER == PARAMETER_DELAY_MODE) {
-    return 80;
-  } else if (STATE_PARAMETER == PARAMETER_LFO_WAVEFORM) {
+int getEncoderMaxPosition(int parameter) {
+  if (parameter == PARAMETER_DELAY_MODE) {
+    return 90;
+  } else if (parameter == PARAMETER_LFO_WAVEFORM) {
     return 95;
   } else {
     return ENCODER_MAX_POSITION;
   }
 }
 
-int getEncoderMinPosition() {
-  if (STATE_PARAMETER == PARAMETER_DELAY_MODE) {
-    return 50;
-  } else if (STATE_PARAMETER == PARAMETER_LFO_WAVEFORM) {
+int getEncoderMinPosition(int parameter) {
+  if (parameter == PARAMETER_DELAY_MODE) {
+    return 40;
+  } else if (parameter == PARAMETER_LFO_WAVEFORM) {
     return 0;
   } else {
     return ENCODER_MIN_POSITION;
@@ -421,7 +422,7 @@ void sendMidiPreset() {
   delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
   sendMidiParameter(3);
   delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
-  sendMidiParameter(4); // send mix setting last to mute glitch sounds
+  sendMidiParameter(4);
   delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
   sendMidiParameter(5);
   delay(MIDI_DELAY_BETWEEN_PARAMETERS_MS);
@@ -431,11 +432,21 @@ void sendMidiPreset() {
 }
 
 void sendMidiParameter(int parameter) {
-  // Sends only STATE_PARMAETER in ACTIVE_MIDI_DATA
+  if (shouldSkip(parameter)) {
+    return;
+  }
   noInterrupts();
   char ccMidi = 0xB0;
   Serial.write(ccMidi);
   Serial.write(getMidiCcParameter(parameter));
   Serial.write(ACTIVE_MIDI_DATA[parameter]);
   interrupts();
+}
+
+bool shouldSkip(int parameter) {
+  // if delay mode is at minimum value, skip it
+  if ((getMidiCcParameter(parameter) == 86) && (ACTIVE_MIDI_DATA[parameter] <= getEncoderMinPosition(parameter))) {
+    return true;
+  }
+  return false;
 }
